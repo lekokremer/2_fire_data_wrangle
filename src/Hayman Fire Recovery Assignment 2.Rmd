@@ -1,92 +1,297 @@
 ---
-title: "Hayman Fire Recovery"
-author: "Matthew Ross"
-date: "10/3/2019"
+title: "Kremer_hmwrk2_wrangling_data"
+author: "Lauren Kremer"
+date: "2/4/2022"
 output: html_document
 ---
 
-```{r setup, warning=F,message=F}
-library(tidyverse)
-library(tidyr)
-library(ggthemes)
-library(lubridate)
+Install needed packages with a function. If the code is being used on a 
+computer that does not have these packages, the function will install them.
 
-# Now that we have learned how to munge (manipulate) data
-# and plot it, we will work on using these skills in new ways
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T,
+                      message = F,
+                      fig.keep='all')
 
-knitr::opts_knit$set(root.dir='..')
+pkgTest <- function(x)
+{
+  if (x %in% rownames(installed.packages()) == FALSE) {
+    install.packages(x, dependencies= TRUE)
+  }
+  library(x, character.only = TRUE)
+}
+
+# Make a vector of the packages you need
+neededPackages <- c('tidyverse', 'tidyr', 'ggthemes', 'lubridate', 'ggpubr', 'dygraphs', 'ggpmisc') 
+
+for (package in neededPackages){pkgTest(package)}
 ```
 
+**Opening the data**<br/>
+  Generate a function that:
+  
+  1. opens all files in the data folder and <br />
+  2. adds the index name as a column value to the dataframe<br />
+  3. concatonates the data into one df
 
-```{r dataread, warning=F,message=F}
-####-----Reading in Data and Stacking it ----- ####
-#Reading in files
-files <- list.files('../data',full.names=T)
+```{r}
+opn_concat_co <- function(data_folder) {
+  path_list <- paste(getwd(),list.files(data_folder, full.names = T), sep='/')
+  data <- lapply(path_list, function(x) {
+    dat <- read.csv(x)%>% 
+    rename(burned=2,unburned=3) %>%
+    mutate(data = strsplit(strsplit(strsplit(x, "/")[[1]][9], '_')[[1]][2], '\\.')[[1]][1])
+    return(dat)
+  })
+  combined.data <- do.call(rbind, data)
+  return(combined.data)
+}
 
+```
 
-#Read in individual data files
-ndmi <- read_csv(files[1]) %>% 
-  rename(burned=2,unburned=3) %>%
-  mutate(data='ndmi')
+Open the data for the assingment:
 
+```{r}
+# Open as a long dataset
+setwd('/Users/laurenkremer/Dropbox/PhD_coursework/ESS580_environmental_science/2_fire_data_wrangle')
+data <- 'data'
 
-ndsi <- read_csv(files[2]) %>% 
-  rename(burned=2,unburned=3) %>%
-  mutate(data='ndsi')
-
-ndvi <- read_csv(files[3])%>% 
-  rename(burned=2,unburned=3) %>%
-  mutate(data='ndvi')
-
-# Stack as a tidy dataset
-full_long <- rbind(ndvi,ndmi,ndsi) %>%
+full_long <- opn_concat_co(data) %>%
   gather(key='site',value='value',-DateTime,-data) %>%
   filter(!is.na(value))
+```
+
+**Question 1**
+
+1. What is the correlation between NDVI and NDMI? - here I want you to
+ convert the full_long dataset in to a wide dataset using the 
+ function "spread" and then make a plot that shows the correlation as a
+ function of if the site was burned or not
+
+
+-Using spread(), convert long dataset into wide<br />
+-remove rows with NA vaues<br />
+-add a 'month' and 'year' column for aggregation<br />
+
+```{r}
+full_wide <- spread(data=full_long, key='data',value='value') %>%
+  filter_if(is.numeric,all_vars(!is.na(.))) %>%
+  mutate(month = month(DateTime),
+         year = year(DateTime))
+
+site_names <- c('burned' = "Burned", 
+                'unburned' = "Unburned") # using this as a labeller for the 
+# facet wrap
+ggplot(full_wide,aes(x=ndmi,y=ndvi)) + 
+  geom_point() + 
+  geom_smooth(method='lm', formula= y~x) +
+  facet_wrap(~site, labeller = as_labeller(site_names)) +
+  stat_cor(aes(label = ..rr.label..), color = "red", geom = "label") +
+  theme_few() + 
+  xlab("NDMI") +
+  ylab("NDVI") +
+  scale_color_few(palette = 'Dark') + 
+  theme(legend.position=c(0.8,0.8))
+```
+
+**Response**<br/>
+**It appears as though there is a greater correlation between NDVI and NDMI in unburned plots than burned plots, though there is a lot of variability. There may be some winter points (e.g. high NDMI, low NDVI) that indicate winter observations could be removed to make relationships more clear.**
+
+
+**Question 2**
+What is the correlation between average NDSI (normalized 
+ snow index) for January - April and average NDVI for June-August?
+In other words, does the previous year's snow cover influence vegetation
+ growth for the following summer? 
+
+Using the wide dataframe to keep month column, <br />
+-select needed columns, <br />
+-make dataframe long for easy filtering and plotting <br />
+-filter the dataframe with an 'or', keeping everthing with NDSI month %in% c(1,2,3,4), NDVI month %in% c(6,7,8) <br />
+-average NDVI and NDSI values by year <br />
+-spread the data to plot NDVI vs. NDSI<br />
+
+```{r}
+plot_data <- full_wide %>% 
+  select(c(month, year, ndvi, ndsi)) %>%
+  gather(key='name',value='value',-month,-year) %>%
+  filter(name == 'ndvi' & month %in% c(6,7,8) | name== 'ndsi' & month %in% c(1,2,3,4)) %>%
+  group_by(year, name) %>% summarize(meanvalue = mean(value)) %>%
+  spread(key='name', value='meanvalue')
+  
+#create line plot for yearly mean...
+ggplot(plot_data, aes(ndsi, ndvi)) +
+  geom_line() +
+  geom_smooth(method='lm', formula= y~x) +
+  xlab('NDSI') +
+  ylab('NDVI')
 
 
 ```
 
+**Response**<br/>
+**There does not appear to be a correlation between NDSI and NDVI at these sites.  However, the indices each reflect a lot of annual variability even with the limited months.It would be interesting to see the effect of temperature on this data.**
 
 
+**Question 3**
+How is the snow effect from question 2 different between pre- and post-burn and burned and unburned? 
 
-## Question 1) 
+Organization and aggregation methods are the same as for Question 2 but with the additon of 'site' in group by() to separate burned and unburned values.
 
-What is the correlation between NDVI and NDMI? - here I want you to
-convert the full_long dataset in to a wide dataset using the 
-function "spread" and then make a plot that shows the correlation s a
-function of if the site was burned or not (x axis should be ndmi)
-You should exclude winter months and focus on summer months
+```{r}
+plot_data_fire <- full_wide %>% 
+  select(c(month, year, ndvi, ndsi, site)) %>%
+  gather(key='name',value='value',-month,-year, -site) %>%
+  filter(name == 'ndvi' & month %in% c(6,7,8) | name== 'ndsi' & month %in% c(1,2,3,4)) %>%
+  group_by(year, name, site) %>% summarize(meanvalue = mean(value)) %>%
+  spread(key='name', value='meanvalue')
+
+#create line plot for yearly mean...
+
+ggplot(plot_data_fire, aes(ndsi, ndvi, color = site)) +
+  geom_line() +
+  geom_smooth(method='lm', formula= y~x, se = F) +
+  xlab('NDSI') +
+  ylab('NDVI') +
+  scale_color_manual(name="Burn status",
+                       labels=c("Burned","Unburned"),
+                       values=c("darkred", "navy")) +
+                       stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~~")), 
+               label.x.npc = "right", label.y.npc = c(0.2, 0.3),
+               formula = y~x, parse = TRUE, size = 3)
+
+```
+
+**Response**<br/>
+**Separating burned from unburned reveals that there may be a greater correlation between NDSI and NDVI in burned sites, but the r2 value is very low. Again, interannual variation could be affecting this so the addition of more variables might reveal that a combination of, say, NDSI and spring temperatures affect NDVI**
+
+**Question 4**
+What month is the greenest month on average? Does this change in the burned plots after the fire? 
 
 
+```{r}
 
-## Question 2 
+# To simply print max monthly values for each burn type:
+max_ndvi <- full_wide %>% 
+  select(c(month, year, ndvi, site)) %>% # select desired columns
+  group_by(month, site) %>% # group by month and burn type
+  summarize(value = mean(ndvi)) %>% #find the mean
+  ungroup()%>% 
+  group_by(site) %>% # group again by burn type
+  filter(value == max(value)) # and find the max value for each
 
-2) What is the correlation between average NDSI (normalized
- snow index) for January - April and average NDVI for June-August?
-In other words, does the previous year's snow cover influence vegetation
- growth for the following summer?
+max_ndvi
 
+# Or we can look at plots to determine max visually
 
-## Q3
-
-How is the snow effect from question 2 different between pre- and post-burn
-and burned and unburned? 
-
-
-## Question 4
-
-What month is the greenest month on average? 
-
-
+plot_data_ndvi <- full_wide %>% 
+  select(c(month, year, ndvi, site)) %>%
+  group_by(month, site) %>% summarize(meanvalue = mean(ndvi))
 
 
-## Question 5) 
+# generate a plot that compares burned with unburned
+ggplot(plot_data_ndvi, aes(month, meanvalue, color = site)) +
+  geom_line() +
+  xlab('Month') +
+  ylab('NDVI') +
+  scale_x_continuous(breaks = 1:12, 
+                     labels = c('J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D')) +
+  scale_color_manual(name="Burn status",
+                       labels=c("Burned","Unburned"),
+                       values=c("darkred", "navy"))
 
+```
+
+**Response**<br/>
+**The greenest month appears to be August for the burned plots and September for the unburned plots.**
+
+**Question 5**
 What month is the snowiest on average?
+```{r}
+# To simply print max monthly values, use same code as above :
+max_ndsi <- full_wide %>% 
+  select(c(month, year, ndsi)) %>%
+  group_by(month) %>% 
+  summarize(value = mean(ndsi)) %>%
+  filter(value == max(value))
+
+max_ndsi
+# January appears to have maximum monthly mean
+# Or we can look at plots to determine max visually
+
+plot_data_ndsi <- full_wide %>% 
+  select(c(month, year, ndsi)) %>%
+  group_by(month) %>% summarize(meanvalue = mean(ndsi))
+
+
+# generate a plot that compares burned with unburned
+ggplot(plot_data_ndsi, aes(month, meanvalue)) +
+  geom_line() +
+  xlab('Month') +
+  ylab('NDSI') +
+  scale_x_continuous(breaks = 1:12, 
+                     labels = c('J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D')) 
+```
+
+**Response**<br/>
+**January appears to have the highest monthly mean**
 
 
 ## Bonus Question: Redo all problems with `spread` and `gather` using modern tidyverse syntax. 
 
+```{r}
+setwd('/Users/laurenkremer/Dropbox/PhD_coursework/ESS580_environmental_science/2_fire_data_wrangle')
+data <- 'data'
+
+full_long <- opn_concat_co(data) %>%
+  #gather(key='site',value='value',-DateTime,-data) %>%
+  pivot_longer(c(burned,unburned)) %>%
+  filter(!is.na(value))
+```
+
+
+```{r}
+plot_data <- full_wide %>% 
+  select(c(month, year, ndvi, ndsi)) %>%
+  pivot_longer(c(ndvi,ndsi)) %>%
+  filter(name == 'ndvi' & month %in% c(6,7,8) | name== 'ndsi' & month %in% c(1,2,3,4)) %>%
+  group_by(year, name) %>% summarize(meanvalue = mean(value)) %>%
+  pivot_wider(names_from = name, values_from = meanvalue)
+  
+#create line plot for yearly mean...
+ggplot(plot_data, aes(ndsi, ndvi)) +
+  geom_line() +
+  geom_smooth(method='lm', formula= y~x) +
+  xlab('NDSI') +
+  ylab('NDVI')
+
+
+```
+
+```{r}
+plot_data_fire <- full_wide %>% 
+  select(c(month, year, ndvi, ndsi, site)) %>%
+  pivot_longer(c(ndvi,ndsi)) %>%
+  filter(name == 'ndvi' & month %in% c(6,7,8) | name== 'ndsi' & month %in% c(1,2,3,4)) %>%
+  group_by(year, name, site) %>% summarize(meanvalue = mean(value)) %>%
+  pivot_wider(names_from = name, values_from = meanvalue)
+
+#create line plot for yearly mean...
+
+ggplot(plot_data_fire, aes(ndsi, ndvi, color = site)) +
+  geom_line() +
+  geom_smooth(method='lm', formula= y~x, se = F) +
+  xlab('NDSI') +
+  ylab('NDVI') +
+  scale_color_manual(name="Burn status",
+                       labels=c("Burned","Unburned"),
+                       values=c("darkred", "navy")) +
+                       stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~~")), 
+               label.x.npc = "right", label.y.npc = c(0.2, 0.3),
+               formula = y~x, parse = TRUE, size = 3)
+
+
+```
 
 ## Bonus Question: Use Climage Engine to pull the same data for the assignment, but updated with 2020/2021 data.
 
