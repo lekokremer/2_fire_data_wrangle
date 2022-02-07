@@ -180,7 +180,8 @@ max_ndvi <- full_wide %>%
   group_by(site) %>% # group again by burn type
   filter(value == max(value)) # and find the max value for each
 
-max_ndvi
+
+cat("The", toString(max_ndvi$site[1]), "maximum is during month", toString(max_ndvi$month[1]),  'while the', toString(max_ndvi$site[2]), 'maximum is during month', toString(max_ndvi$month[2]), '.')
 
 # Or we can look at plots to determine max visually
 
