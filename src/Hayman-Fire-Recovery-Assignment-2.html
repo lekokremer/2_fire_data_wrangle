@@ -487,11 +487,8 @@ max_ndsi &lt;- full_wide %&gt;%
   summarize(value = mean(ndsi)) %&gt;%
   filter(value == max(value))
 
-max_ndsi</code></pre>
-<pre><code>## # A tibble: 1 x 2
-##   month value
-##   &lt;dbl&gt; &lt;dbl&gt;
-## 1     1 0.210</code></pre>
+cat(&quot;The maximum NDSI is during month&quot;, toString(max_ndsi$month[1]))</code></pre>
+<pre><code>## The maximum NDSI is during month 1</code></pre>
 <pre class="r"><code># January appears to have maximum monthly mean
 # Or we can look at plots to determine max visually
 

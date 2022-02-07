@@ -216,7 +216,7 @@ max_ndsi <- full_wide %>%
   summarize(value = mean(ndsi)) %>%
   filter(value == max(value))
 
-max_ndsi
+cat("The maximum NDSI is during month", toString(max_ndsi$month[1]))
 # January appears to have maximum monthly mean
 # Or we can look at plots to determine max visually
 
